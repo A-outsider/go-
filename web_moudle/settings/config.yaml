@@ -1,0 +1,33 @@
+app:
+  name: "web_app"
+  mode: "dev"
+  port: "8080"
+  host: "127.0.0.1"
+
+log:
+  level: "debug"
+  filename: "log/666"
+  max_size: 200
+  max_age : 30
+  max_backups: 7     #备份数量
+
+mysql:
+  host: "127.0.0.1"
+  port: "3306"
+  user: "root"
+  password: "12cchheenn"
+  dbname : "sql_demo"
+  # max_open_conns: 200
+  # max_idle_conns: 50
+
+
+#  mysql:
+#    dsn: "root:12cchheenn@(127.0.0.1:3306)/ginchat?charset=utf8mb4&parseTime=True&loc=Local"
+
+
+
+redis:
+    addr: "localhost:6379"
+    Password: ""
+    DB: 1
+    poolSize: 100
