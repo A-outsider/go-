@@ -1,0 +1,28 @@
+syntax = "proto3"; // 版本声明，使用Protocol Buffers v3版本
+
+option go_package = "/newpb";  // 指定生成的Go代码在你项目中的导入路径
+
+package newpb; // 包名
+import "pb/user.proto"; //注意 : 该目录是在命令行执行目录下
+//import "google/protobuf/any.proto";
+//生成到别的包指令 protoc --go_out=. --go-grpc_out=. ./pb/hello.proto ./pb/user.proto
+
+// 定义服务
+service Greeter {
+  // SayHello 方法
+  rpc SayHello (HelloRequest) returns (HelloResponse) {}  //普通传输
+  rpc LotsOfReplies (HelloRequest) returns (stream HelloResponse) {}  //服务器流式传输
+  rpc LotsOfGreetings (stream HelloRequest) returns (HelloResponse) {} //客户端流式传输
+  rpc BidiHello (stream HelloRequest) returns (stream HelloResponse) {} //双向流式传输
+}
+
+// 请求消息
+message HelloRequest {
+  string name = 1;
+  User age = 2;     //导别包的代码示例
+}
+
+// 响应消息
+message HelloResponse {
+  string reply = 1;
+}

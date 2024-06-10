@@ -1,0 +1,11 @@
+syntax = "proto3"; // 版本声明，使用Protocol Buffers v3版本
+
+option go_package = "/newpb";  // 指定生成的Go代码在你项目中的导入路径
+
+
+package newpb; // 包名
+
+message User {
+  string name = 1;
+  int32 age = 2;
+}
