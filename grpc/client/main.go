@@ -4,11 +4,13 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/hashicorp/consul/api"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	pb "hello_client/newpb"
 	"io"
 	"log"
+	"strconv"
 	"time"
 )
 
@@ -17,7 +19,7 @@ const (
 )
 
 var (
-	addr = flag.String("addr", "127.0.0.1:8972", "the address to connect to")
+	//addr = flag.String("addr", "192.168.1.6:8972", "the address to connect to")
 	name = flag.String("name", defaultName, "Name to greet")
 )
 
@@ -149,7 +151,29 @@ func main() {
 	//WithPerRPCCredentials用来传递认证信息,它里面定义了两个方法
 	//GetRequestMetadata用来获取认证信息，RequireTransportSecurity用来判断是否需要安全传输
 	//我们需要写一个结构体实现这个接口并调用
-	conn, err := grpc.Dial(*addr, grpc.WithTransportCredentials(creds), grpc.WithPerRPCCredentials(token))
+
+	//连接consul
+	config := api.DefaultConfig()
+	config.Address = "192.168.134.130:8500"
+	cc, err := api.NewClient(config)
+	if err != nil {
+		fmt.Printf("err:%v\n", err)
+		return
+	}
+	// 返回的是一个 map[string]*api.AgentService
+	// 其中key是服务ID，值是注册的服务信息
+	serviceMap, err := cc.Agent().ServicesWithFilter("Service==`my-grpc-service`")
+	if err != nil {
+		fmt.Printf("err:%v\n", err)
+		return
+	}
+	// 选一个服务机（这里选最后一个）
+	var addr string
+	for k, v := range serviceMap {
+		fmt.Printf("%s:%#v\n", k, v)
+		addr = v.Address + ":" + strconv.Itoa(v.Port)
+	}
+	conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(creds), grpc.WithPerRPCCredentials(token))
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}
@@ -157,6 +181,6 @@ func main() {
 	c := pb.NewGreeterClient(conn) //创建grpc客户端对象创建存根
 	//run(c)
 	//runLostOfReplies(c)
-	//runLotsOfGreetings(c)
-	runBidiHello(c)
+	runLotsOfGreetings(c)
+	//runBidiHello(c)
 }

@@ -6,12 +6,18 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/health"
+	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	pb "hello_server/newpb"
 	"io"
 	"log"
 	"net"
+	"os"
+	"os/signal"
+	Consul_connect "server/consul_connect"
+	pb "server/newpb"
+	"syscall"
 )
 
 type server struct { //这里默认建议嵌入UnimplementedGreeterServer, 提供默认实现和向前兼容性
@@ -111,23 +117,55 @@ func valid(strings []string) bool { //进行拦截器信息部分的校验
 }
 
 func main() {
+	// 使用自己的单向证书certs
 	creds, err2 := credentials.NewServerTLSFromFile("../cert/server.pem", "../cert/server.key")
 	if err2 != nil {
 		log.Printf("failed to create credentials: %v", err2)
 	}
-	lis, err := net.Listen("tcp", ":8972") //创建一个连接
+	//-----------------建立一个普通的tcp连接--------------------------
+	ip, err := Consul_connect.GetOutboundIP() //用本机出口作为服务端监听的ip
+	if err != nil {
+		log.Fatalf("获取本机出口IP失败: %v", err)
+	}
+	lis, err := net.Listen("tcp", fmt.Sprintf("%s:%d", ip, 8972))
+
 	if err != nil {
 		fmt.Printf("failed to listen: %v", err)
 		return
 	}
-	var authInterceptor = unaryInterceptor // 创建一个拦截器
+
+	//---------------实现拦截器逻辑并注册grpc服务---------------------
+	authInterceptor := unaryInterceptor // 创建一个拦截器
 	//// 使用自己的单向证书certs并使用拦截器校验token信息来创建服务
 	s := grpc.NewServer(grpc.Creds(creds), grpc.UnaryInterceptor(authInterceptor))
-
 	pb.RegisterGreeterServer(s, &server{}) // 向grpc注册一个服务端的服务
-	err = s.Serve(lis)                     // 启动服务
+
+	// -----------consul健康检查部分的逻辑-----------------------
+	healthcheck := health.NewServer()                   //启动健康检查的服务
+	grpc_health_v1.RegisterHealthServer(s, healthcheck) // 注册健康检查服务到grpc中
+
+	//----TCP 连接升级为 gRPC 连接 , 并启动服务--------------
+	go func() {
+		err = s.Serve(lis)
+		if err != nil {
+			log.Printf("failed to serve: %v", err)
+			return
+		}
+	}()
+	//---------------调用consul包实现连接的逻辑-----------------
+	consul, err, serviceId := Consul_connect.Register()
 	if err != nil {
-		fmt.Printf("failed to serve: %v", err)
-		return
+		log.Fatalf("Failed to register service with Consul: %v", err)
 	}
+
+	//--------------实现优雅关机----------------
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
+	<-quit
+	s.GracefulStop() //优雅关闭grpc服务
+	// 退出时注销服务
+	if err := consul.Deregister(serviceId); err != nil {
+		log.Fatalf("Failed to deregister service: %v", err)
+	}
+	fmt.Println("Service deregistered from Consul")
 }
